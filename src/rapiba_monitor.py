@@ -43,14 +43,20 @@ def main():
         logger.error(f"Konfiguration nicht gefunden: {config_path}")
         sys.exit(1)
     
-    config = Config(config_path)
-    detector = DeviceDetector(config, logger)
-    engine = BackupEngine(config, logger)
+    try:
+        config = Config(config_path)
+        detector = DeviceDetector(config, logger)
+        engine = BackupEngine(config, logger)
+    except Exception as e:
+        logger.error(f"Fehler beim Initialisieren: {e}", exc_info=True)
+        sys.exit(1)
     
     known_devices = set()
     check_interval = 5  # Sekunden
     
     logger.info(f"Starte Device-Monitor mit {check_interval}s Intervall")
+    logger.info(f"Überwache Quellen: {config.get('BACKUP_SOURCES')}")
+    logger.info(f"Backup-Ziel: {config.get('BACKUP_TARGET')}")
     
     try:
         while True:
