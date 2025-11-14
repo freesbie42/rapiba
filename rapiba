@@ -51,6 +51,7 @@ ${BLUE}Befehle:${NC}
   logs                 Live-Logs anzeigen
   stats                Backup-Statistiken anzeigen
   quick-setup          Schnelle Konfiguration für Anfänger
+  factory-reset        Auf Werkseinstellungen zurücksetzen (löscht gespeicherte Daten)
   test                 Tests durchführen
   help                 Diese Hilfe anzeigen
 
@@ -65,6 +66,7 @@ ${BLUE}Beispiele:${NC}
   $0 status
   $0 logs
   $0 stats
+  sudo $0 factory-reset
 
 EOF
 }
@@ -235,6 +237,113 @@ print('  DUPLICATE_CHECK_METHOD:', config.get('DUPLICATE_CHECK_METHOD'))
     fi
 }
 
+cmd_factory_reset() {
+    print_header "⚠️  WERKSEINSTELLUNG ZURÜCKSETZEN"
+    
+    check_root
+    
+    echo ""
+    echo -e "${RED}WARNUNG: Dies werden alle gespeicherten Daten löschen:${NC}"
+    echo "  • Duplikat-Datenbank"
+    echo "  • Alle Log-Dateien"
+    echo "  • Backup-Verzeichnisse werden gelöscht"
+    echo "  • Konfiguration wird zurückgesetzt"
+    echo ""
+    echo "Die folgenden Verzeichnisse werden GELÖSCHT:"
+    echo "  • /var/lib/rapiba/ (Duplikat-DB)"
+    echo "  • /var/log/rapiba/ (Logs)"
+    echo "  • /backup/ (Alle Backups)"
+    echo "  • /etc/rapiba/ (Konfiguration)"
+    echo ""
+    
+    # Doppelte Bestätigung
+    read -p "Wirklich alle Daten löschen? Gib 'FACTORY RESET' ein zum Bestätigen: " confirm
+    if [ "$confirm" != "FACTORY RESET" ]; then
+        print_warning "Abgebrochen"
+        exit 0
+    fi
+    
+    echo ""
+    read -p "LETZTE WARNUNG: Dies kann nicht rückgängig gemacht werden. Ja/Nein: " final_confirm
+    if [ "$final_confirm" != "Ja" ]; then
+        print_warning "Abgebrochen"
+        exit 0
+    fi
+    
+    echo ""
+    print_info "Starte Werkseinstellung-Reset..."
+    
+    # Stoppe Service
+    print_info "Stoppe Services..."
+    systemctl stop rapiba || true
+    systemctl stop rapiba-backup.timer || true
+    systemctl stop rapiba-backup.service || true
+    
+    # Lösche Duplikat-Datenbank
+    print_info "Lösche Duplikat-Datenbank..."
+    rm -rf /var/lib/rapiba || true
+    mkdir -p /var/lib/rapiba
+    chmod 755 /var/lib/rapiba
+    
+    # Lösche Logs
+    print_info "Lösche Log-Dateien..."
+    rm -rf /var/log/rapiba || true
+    mkdir -p /var/log/rapiba
+    chmod 755 /var/log/rapiba
+    
+    # Lösche Backups
+    print_info "Lösche Backup-Verzeichnis..."
+    rm -rf /backup || true
+    mkdir -p /backup
+    chmod 755 /backup
+    
+    # Lösche Konfiguration (wird wiederhergestellt)
+    print_info "Lösche Konfiguration..."
+    rm -rf /etc/rapiba || true
+    mkdir -p /etc/rapiba
+    chmod 755 /etc/rapiba
+    
+    # Stelle Standard-Konfiguration wieder her
+    print_info "Stelle Standard-Konfiguration wieder her..."
+    if [ -f "$SCRIPT_DIR/etc/rapiba.conf" ]; then
+        cp "$SCRIPT_DIR/etc/rapiba.conf" /etc/rapiba/rapiba.conf
+        chmod 644 /etc/rapiba/rapiba.conf
+        print_success "Standard-Konfiguration wiederhergestellt"
+    else
+        print_warning "Original-Konfiguration nicht gefunden, erstelle Minimal-Config..."
+        cat > /etc/rapiba/rapiba.conf << 'CONFEOF'
+[rapiba]
+# Rapiba - Werkseinstellungen nach Factory Reset
+BACKUP_SOURCES=/media/usb,/media/sdcard
+BACKUP_TARGET=/backup
+BACKUP_PATH_FORMAT=number
+DUPLICATE_CHECK_METHOD=sha256
+DUPLICATE_DB_PATH=/var/lib/rapiba/duplicate_db.sqlite3
+LOG_DIR=/var/log/rapiba
+LOG_LEVEL=INFO
+AUTO_DETECT_DEVICES=yes
+PARALLEL_JOBS=2
+COMPRESS_BACKUPS=no
+VERIFY_CHECKSUMS=yes
+DRY_RUN=no
+CONFEOF
+        chmod 644 /etc/rapiba/rapiba.conf
+    fi
+    
+    # Starten den Service neu
+    print_info "Starte Service neu..."
+    systemctl daemon-reload
+    systemctl start rapiba || true
+    
+    echo ""
+    print_success "Werkseinstellung erfolgreich zurückgesetzt!"
+    echo ""
+    print_info "Nächste Schritte:"
+    echo "  1. Konfiguriere: sudo nano /etc/rapiba/rapiba.conf"
+    echo "  2. Oder nutze Quick-Setup: sudo $0 quick-setup"
+    echo "  3. Prüfe Status: $0 status"
+}
+
 # Main
 case "${1:-help}" in
     install)
@@ -254,6 +363,9 @@ case "${1:-help}" in
         ;;
     quick-setup)
         cmd_quick_setup
+        ;;
+    factory-reset)
+        cmd_factory_reset
         ;;
     test)
         cmd_test

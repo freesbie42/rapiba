@@ -116,6 +116,21 @@ systemctl restart rapiba
 systemctl stop rapiba
 ```
 
+### Werkseinstellung zurücksetzen
+
+```bash
+# Alle gespeicherten Daten löschen (Factory Reset)
+sudo rapiba --factory-reset
+```
+
+⚠️ **WARNUNG**: Dies löscht:
+- Duplikat-Datenbank (`/var/lib/rapiba/`)
+- Alle Log-Dateien (`/var/log/rapiba/`)
+- Alle Backups (`/backup/`)
+- Konfiguration (wird auf Werkseinstellungen zurückgesetzt)
+
+Dies kann **NICHT rückgängig gemacht werden**!
+
 ## Backup-Pfad Formate
 
 ### datetime
@@ -257,6 +272,27 @@ Ergebnis:
 ```
 
 ## Troubleshooting
+
+### Werkseinstellung zurücksetzen (Factory Reset)
+
+Falls du Rapiba komplett neu aufsetzen möchtest:
+
+```bash
+sudo rapiba --factory-reset
+```
+
+Dies wird:
+1. ✓ Den Service stoppen
+2. ✓ Die Duplikat-Datenbank löschen
+3. ✓ Alle Log-Dateien löschen
+4. ✓ Das Backup-Verzeichnis löschen
+5. ✓ Die Konfiguration zurücksetzen (auf Werkseinstellungen)
+6. ✓ Die Standard-Konfiguration wiederherstellen
+7. ✓ Den Service neu starten
+
+**Das System ist dann wie nach der Installation - vollständig leer.**
+
+**Wichtig**: Die Bestätigung erfordert zweifache Eingabe zum Schutz vor Unfällen.
 
 ### Backups werden nicht automatisch gestartet
 
