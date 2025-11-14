@@ -14,10 +14,25 @@ echo ""
 
 echo -e "${BLUE}[1] Python Überprüfung${NC}"
 if command -v python3 &> /dev/null; then
-    echo -e "${GREEN}✓${NC} Python 3 gefunden: $(python3 --version)"
-    python3 -c "import sys; print(f'  Python Path: {sys.executable}')"
+    PYTHON_VERSION=$(python3 --version 2>&1)
+    echo -e "${GREEN}✓${NC} Python 3 gefunden: $PYTHON_VERSION"
+    python3 -c "
+import sys
+print(f'  Python Path: {sys.executable}')
+print(f'  Python Version: {sys.version}')
+version_info = sys.version_info
+if version_info.major == 3 and version_info.minor >= 6:
+    print(f'  ✓ Version OK (3.{version_info.minor} >= 3.6)')
+else:
+    print(f'  ✗ Version zu alt (3.{version_info.minor} < 3.6 erforderlich)')
+    sys.exit(1)
+"
 else
     echo -e "${RED}✗${NC} Python 3 nicht gefunden!"
+    echo ""
+    echo "Installation:"
+    echo "  sudo apt-get update"
+    echo "  sudo apt-get install -y python3 python3-pip"
     exit 1
 fi
 echo ""

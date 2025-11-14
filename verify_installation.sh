@@ -110,8 +110,23 @@ echo ""
 # Python & Requirements
 echo -e "${BLUE}[1] Python & Dependencies${NC}"
 check_command "python3" "Python 3"
+
+# Prüfe Python Version
+if command -v python3 &> /dev/null; then
+    PYTHON_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
+    if [ "$(printf '%s\n' "3.6" "$PYTHON_VERSION" | sort -V | head -n1)" = "3.6" ]; then
+        echo -e "${GREEN}✓${NC} Python Version OK: $PYTHON_VERSION (minimum 3.6 erforderlich)"
+        ((CHECKS_PASSED++))
+    else
+        echo -e "${RED}✗${NC} Python Version zu alt: $PYTHON_VERSION (minimum 3.6 erforderlich)"
+        ((CHECKS_FAILED++))
+    fi
+fi
+
 check_python_module "sqlite3" "SQLite3 Module"
 check_python_module "configparser" "ConfigParser Module"
+check_python_module "hashlib" "Hashlib Module"
+check_python_module "concurrent.futures" "Concurrent Module"
 check_python_module "tabulate" "Tabulate Module (optional)"
 echo ""
 

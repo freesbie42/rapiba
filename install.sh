@@ -14,6 +14,27 @@ if [ "$EUID" -ne 0 ]; then
    exit 1
 fi
 
+# Prüfe Python3 Verfügbarkeit und Minimum Version
+echo "[0/8] Prüfe Python3..."
+if ! command -v python3 &> /dev/null; then
+   echo "Fehler: Python3 nicht installiert"
+   echo "Installation auf Raspberry Pi:"
+   echo "  sudo apt-get update"
+   echo "  sudo apt-get install -y python3 python3-pip"
+   exit 1
+fi
+
+# Prüfe Minimum Python Version (3.6+)
+PYTHON_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
+REQUIRED_VERSION="3.6"
+
+if [ "$(printf '%s\n' "$REQUIRED_VERSION" "$PYTHON_VERSION" | sort -V | head -n1)" != "$REQUIRED_VERSION" ]; then
+   echo "Fehler: Python $PYTHON_VERSION gefunden, aber $REQUIRED_VERSION oder höher erforderlich"
+   exit 1
+fi
+
+echo "✓ Python $PYTHON_VERSION gefunden"
+
 INSTALL_DIR="/usr/local/lib/rapiba"
 BIN_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/rapiba"

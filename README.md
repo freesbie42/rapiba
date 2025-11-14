@@ -13,6 +13,15 @@ Ein automatisches Backup-System für Raspberry Pi, das USB-Sticks und SD-Cards e
 ✅ **systemd Integration** - Läuft als Systemdienst  
 ✅ **udev Integration** - Triggert automatisch bei Geräteerkennung  
 
+## Anforderungen
+
+- **Python 3.6+** (siehe [PYTHON_REQUIREMENTS.md](PYTHON_REQUIREMENTS.md))
+- Raspberry Pi mit Raspbian/Debian oder ähnlich
+- Root-Zugriff für Installation
+- ~20 MB freier Speicher
+
+Siehe `check_python_requirements.sh` zur Überprüfung der Python-Installation.
+
 ## Installation
 
 ### Voraussetzungen
