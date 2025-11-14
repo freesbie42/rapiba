@@ -38,25 +38,30 @@ def main():
         
         config = Config(config_path)
         
-        # Erkenne aktuelle Geräte
+        # Erkenne aktuelle Geräte (ohne Backup-Ziel)
         detector = DeviceDetector(config, logger)
-        devices = detector.detect_devices()
+        devices = detector.detect_devices(exclude_backup_target=True)
         
         if devices:
-            logger.info(f"Starte Backup für erkannte Geräte: {devices}")
+            logger.info(f"🔌 {len(devices)} Gerät(e) erkannt - starte Backup: {', '.join(devices)}")
             engine = BackupEngine(config, logger)
             
             for device in devices:
                 try:
                     device_name = os.path.basename(device) or 'backup'
-                    engine.backup_source(device, device_name)
+                    logger.info(f"→ Backup von {device} läuft...")
+                    success = engine.backup_source(device, device_name)
+                    if success:
+                        logger.info(f"✅ Backup erfolgreich für {device}")
+                    else:
+                        logger.warning(f"⚠️ Backup mit Fehlern abgeschlossen für {device}")
                 except Exception as e:
-                    logger.error(f"Fehler beim Backup von {device}: {e}")
+                    logger.error(f"❌ Fehler beim Backup von {device}: {e}")
         else:
-            logger.info("Keine Geräte erkannt")
+            logger.info("ℹ️ Keine neuen Speichergeräte erkannt")
     
     except Exception as e:
-        logger.error(f"Fehler im Trigger: {e}", exc_info=True)
+        logger.error(f"❌ Fehler im Trigger: {e}", exc_info=True)
 
 
 if __name__ == '__main__':

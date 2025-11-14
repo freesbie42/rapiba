@@ -441,37 +441,208 @@ class BackupEngine:
 # =====================================================
 
 class DeviceDetector:
-    """Erkennt angeschlossene USB/SD-Card Geräte"""
+    """Erkennt angeschlossene USB/SD-Card Geräte durch /proc/mounts"""
+    
+    # Systemdateisysteme - diese ausschließen
+    SYSTEM_FILESYSTEMS = {
+        'tmpfs', 'sysfs', 'devtmpfs', 'devfs', 'proc', 'rootfs',
+        'squashfs', 'pstore', 'securityfs', 'cgroup', 'cgroup2',
+        'debugfs', 'tracefs', 'fuse.gvfsd-fuse', 'iso9660'
+    }
+    
+    # Systemverzeichnisse - diese ausschließen
+    SYSTEM_MOUNT_PATHS = {
+        '/', '/boot', '/sys', '/proc', '/dev', '/run', '/tmp',
+        '/var', '/etc', '/usr', '/bin', '/sbin', '/lib', '/opt'
+    }
+    
+    # Unterstützte Dateisysteme für Speichermedien
+    REMOVABLE_FILESYSTEMS = {
+        'ext4', 'ext3', 'ext2', 'vfat', 'exfat', 'ntfs', 'ntfs-3g',
+        'btrfs', 'xfs', 'f2fs', 'msdos', 'iso9660'
+    }
     
     def __init__(self, config, logger):
         self.config = config
         self.logger = logger
-        self.mount_points = ['/media', '/mnt', '/tmp/mnt']
+        self.backup_target = os.path.realpath(config.get('BACKUP_TARGET'))
     
-    def detect_devices(self):
-        """Erkennt angeschlossene Geräte"""
+    def detect_devices(self, exclude_backup_target=True):
+        """
+        Erkennt alle angeschlossenen Speichergeräte durch Auswertung von /proc/mounts
+        
+        Args:
+            exclude_backup_target: Falls True, wird das Backup-Ziel ausgeschlossen
+        
+        Returns:
+            Liste mit Pfaden aller erkannten Speichergeräte
+        """
         devices = []
         
-        for mount_point in self.mount_points:
-            if os.path.exists(mount_point):
-                try:
-                    entries = os.listdir(mount_point)
-                    for entry in entries:
-                        full_path = os.path.join(mount_point, entry)
-                        if os.path.isdir(full_path) and os.access(full_path, os.R_OK):
-                            devices.append(full_path)
-                            self.logger.info(f"Gerät erkannt: {full_path}")
-                except Exception as e:
-                    self.logger.debug(f"Fehler beim Durchsuchen von {mount_point}: {e}")
+        try:
+            # Lese /proc/mounts
+            mount_data = self._read_mounts()
+            
+            for device, mount_point, filesystem in mount_data:
+                # Prüfe ob Dateisystem unterstützt wird
+                if not self._is_valid_filesystem(filesystem):
+                    continue
+                
+                # Prüfe ob es ein Systempfad ist
+                if self._is_system_mount(mount_point):
+                    continue
+                
+                # Prüfe ob das Verzeichnis lesbar ist
+                if not os.path.isdir(mount_point) or not os.access(mount_point, os.R_OK):
+                    continue
+                
+                # Konvertiere zu realer Pfad
+                real_mount = os.path.realpath(mount_point)
+                
+                # Prüfe ob es das Backup-Ziel ist
+                if exclude_backup_target and real_mount == self.backup_target:
+                    self.logger.debug(f"Backup-Ziel ausgeschlossen: {mount_point}")
+                    continue
+                
+                # Prüfe ob Gerät bereits in Liste
+                if real_mount in devices:
+                    continue
+                
+                devices.append(real_mount)
+                self.logger.debug(f"Gerät erkannt: {mount_point} ({device}, {filesystem})")
         
+        except Exception as e:
+            self.logger.error(f"Fehler beim Erkennen von Geräten: {e}")
+        
+        self.logger.info(f"Insgesamt {len(devices)} Speichergeräte erkannt")
         return devices
     
-    def find_new_devices(self, known_devices):
-        """Findet neue Geräte seit letzter Überprüfung"""
-        current = set(self.detect_devices())
+    def _read_mounts(self):
+        """
+        Liest /proc/mounts und gibt alle eingehängten Dateisysteme zurück
+        
+        Returns:
+            Liste mit Tupeln (device, mount_point, filesystem)
+        """
+        mount_data = []
+        
+        try:
+            with open('/proc/mounts', 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        device = parts[0]
+                        mount_point = parts[1]
+                        filesystem = parts[2]
+                        
+                        # Dekodiere escaped Zeichen (z.B. \040 für Leerzeichen)
+                        mount_point = mount_point.encode().decode('unicode_escape')
+                        
+                        mount_data.append((device, mount_point, filesystem))
+        
+        except FileNotFoundError:
+            self.logger.warning("/proc/mounts nicht gefunden, versuche /etc/mtab")
+            # Fallback auf /etc/mtab
+            try:
+                with open('/etc/mtab', 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith('#'):
+                            continue
+                        
+                        parts = line.split()
+                        if len(parts) >= 3:
+                            device = parts[0]
+                            mount_point = parts[1]
+                            filesystem = parts[2]
+                            mount_data.append((device, mount_point, filesystem))
+            except FileNotFoundError:
+                self.logger.error("Weder /proc/mounts noch /etc/mtab gefunden")
+        
+        return mount_data
+    
+    def _is_valid_filesystem(self, filesystem):
+        """
+        Prüft ob das Dateisystem unterstützt wird
+        
+        Args:
+            filesystem: Name des Dateisystems
+        
+        Returns:
+            True wenn Dateisystem für Backups geeignet ist
+        """
+        if filesystem in self.SYSTEM_FILESYSTEMS:
+            return False
+        
+        if filesystem in self.REMOVABLE_FILESYSTEMS:
+            return True
+        
+        # Unbekannte Dateisysteme akzeptieren, falls nicht in Ausschlussliste
+        return True
+    
+    def _is_system_mount(self, mount_point):
+        """
+        Prüft ob es sich um einen Systempfad handelt
+        
+        Args:
+            mount_point: Zu prüfender Bereitstellungspunkt
+        
+        Returns:
+            True wenn es sich um einen Systempfad handelt
+        """
+        # Exakte Übereinstimmung mit Systempfaden
+        if mount_point in self.SYSTEM_MOUNT_PATHS:
+            return True
+        
+        # Prüfe ob Pfad unter Systempfaden liegt
+        for sys_path in self.SYSTEM_MOUNT_PATHS:
+            if mount_point.startswith(sys_path + '/'):
+                return True
+        
+        return False
+    
+    def find_new_devices(self, known_devices, exclude_backup_target=True):
+        """
+        Findet neue Geräte seit letzter Überprüfung
+        
+        Args:
+            known_devices: Liste der bereits bekannten Geräte
+            exclude_backup_target: Falls True, wird das Backup-Ziel ausgeschlossen
+        
+        Returns:
+            Liste mit neuen Geräten
+        """
+        current = set(self.detect_devices(exclude_backup_target=exclude_backup_target))
         known = set(known_devices)
         new_devices = current - known
+        
+        if new_devices:
+            self.logger.info(f"Neue Geräte erkannt: {', '.join(new_devices)}")
+        
         return list(new_devices)
+    
+    def find_removed_devices(self, known_devices):
+        """
+        Findet entfernte Geräte seit letzter Überprüfung
+        
+        Args:
+            known_devices: Liste der zuletzt bekannten Geräte
+        
+        Returns:
+            Liste mit entfernten Geräten
+        """
+        current = set(self.detect_devices())
+        known = set(known_devices)
+        removed_devices = known - current
+        
+        if removed_devices:
+            self.logger.info(f"Geräte entfernt: {', '.join(removed_devices)}")
+        
+        return list(removed_devices)
 
 
 # =====================================================

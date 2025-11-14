@@ -51,48 +51,61 @@ def main():
         logger.error(f"Fehler beim Initialisieren: {e}", exc_info=True)
         sys.exit(1)
     
-    known_devices = set()
-    check_interval = 5  # Sekunden
+    known_devices = []
+    check_interval = config.get_int('DEVICE_CHECK_INTERVAL', 5)  # Sekunden
     
-    logger.info(f"Starte Device-Monitor mit {check_interval}s Intervall")
-    logger.info(f"Überwache Quellen: {config.get('BACKUP_SOURCES')}")
+    logger.info("=" * 60)
+    logger.info("Rapiba Monitor - Automatische Geräte-Erkennung")
+    logger.info("=" * 60)
+    logger.info(f"Device-Check-Intervall: {check_interval}s")
     logger.info(f"Backup-Ziel: {config.get('BACKUP_TARGET')}")
+    logger.info(f"Backup-Ziel wird automatisch ausgeschlossen")
+    logger.info("Warte auf neue Speichergeräte...")
     
     try:
         while True:
             try:
-                # Erkenne neue Geräte
-                current_devices = set(detector.detect_devices())
-                new_devices = current_devices - known_devices
+                # Erkenne alle aktuellen Geräte (ohne Backup-Ziel)
+                new_devices = detector.find_new_devices(known_devices, exclude_backup_target=True)
                 
                 if new_devices:
-                    logger.info(f"Neue Geräte erkannt: {', '.join(new_devices)}")
+                    logger.info("=" * 60)
+                    logger.info(f"🔌 {len(new_devices)} neue(s) Gerät(e) erkannt!")
+                    logger.info("=" * 60)
                     
                     # Starte Backup für jedes neue Gerät
                     for device in new_devices:
-                        logger.info(f"Starte Backup für {device}")
+                        logger.info(f"Starte Backup für: {device}")
                         try:
                             device_name = os.path.basename(device) or 'backup'
-                            engine.backup_source(device, device_name)
+                            success = engine.backup_source(device, device_name)
+                            if success:
+                                logger.info(f"✅ Backup erfolgreich für {device}")
+                            else:
+                                logger.warning(f"⚠️ Backup mit Fehlern abgeschlossen für {device}")
                         except Exception as e:
-                            logger.error(f"Fehler beim Backup von {device}: {e}")
+                            logger.error(f"❌ Fehler beim Backup von {device}: {e}")
+                    
+                    logger.info("=" * 60)
                 
                 # Prüfe auf entfernte Geräte
-                removed_devices = known_devices - current_devices
+                removed_devices = detector.find_removed_devices(known_devices)
                 if removed_devices:
-                    logger.info(f"Geräte entfernt: {', '.join(removed_devices)}")
+                    logger.info(f"🔌 Geräte entfernt: {', '.join(removed_devices)}")
                 
-                known_devices = current_devices
+                # Aktualisiere bekannte Geräte
+                known_devices = detector.detect_devices()
+                
                 time.sleep(check_interval)
             
             except Exception as e:
-                logger.error(f"Fehler im Monitor-Loop: {e}", exc_info=True)
+                logger.error(f"❌ Fehler im Monitor-Loop: {e}", exc_info=True)
                 time.sleep(check_interval)
     
     except KeyboardInterrupt:
         logger.info("Monitor beendet durch Benutzer")
     except Exception as e:
-        logger.error(f"Kritischer Fehler: {e}", exc_info=True)
+        logger.error(f"❌ Kritischer Fehler: {e}", exc_info=True)
         sys.exit(1)
 
 
