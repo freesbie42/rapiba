@@ -1,0 +1,14 @@
+# udev rules für Rapiba - USB/SD-Card Erkennung
+# Diese Regeln triggern automatisch das Backup-Script
+# bei Anschluss von USB-Geräten oder SD-Cards
+
+# Für USB-Geräte (erkannt wenn /media/usb* Verzeichnis gemountet wird)
+SUBSYSTEM=="usb", ACTION=="add", TAG="systemd", ENV{SYSTEMD_ALIAS}="/sys/subsystem/usb/devices/%k"
+SUBSYSTEM=="block", ATTRS{removable}=="1", ACTION=="add", RUN+="/usr/local/bin/rapiba_trigger"
+
+# Für SD-Cards (SDHC/SDXC)
+SUBSYSTEM=="mmc", ACTION=="add", RUN+="/usr/local/bin/rapiba_trigger"
+
+# Alternative: Mit devlinks (funktioniert mit automount tools)
+ACTION=="add", DEVTYPE=="partition", SUBSYSTEM=="block", RUN+="/usr/local/bin/rapiba_trigger"
+ACTION=="add", DEVTYPE=="disk", SUBSYSTEM=="block", ENV{UDISKS_IGNORE}!="1", RUN+="/usr/local/bin/rapiba_trigger"

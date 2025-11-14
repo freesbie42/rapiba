@@ -1,0 +1,25 @@
+[Unit]
+Description=Rapiba - Automated Raspberry Pi Backup Service
+Documentation=https://github.com/yourusername/rapiba
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/bin/rapiba_monitor
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rapiba
+
+# Security
+PrivateTmp=no
+NoNewPrivileges=true
+ProtectHome=false
+ProtectSystem=false
+
+[Install]
+WantedBy=multi-user.target

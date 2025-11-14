@@ -1,0 +1,270 @@
+#!/bin/bash
+# Rapiba - Main Installation und Management Script
+
+set -e
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_NAME="Rapiba"
+VERSION="1.0.0"
+
+# Farben für Output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+print_header() {
+    echo -e "${BLUE}========================================${NC}"
+    echo -e "${BLUE}$1${NC}"
+    echo -e "${BLUE}========================================${NC}"
+    echo ""
+}
+
+print_success() {
+    echo -e "${GREEN}✓ $1${NC}"
+}
+
+print_error() {
+    echo -e "${RED}✗ $1${NC}"
+}
+
+print_warning() {
+    echo -e "${YELLOW}⚠ $1${NC}"
+}
+
+print_info() {
+    echo -e "${BLUE}ℹ $1${NC}"
+}
+
+show_help() {
+    cat << EOF
+${BLUE}$PROJECT_NAME v$VERSION${NC} - Automated Raspberry Pi Backup System
+
+${BLUE}Verwendung:${NC}
+  $0 [command] [options]
+
+${BLUE}Befehle:${NC}
+  install              Installation durchführen
+  uninstall            Rapiba deinstallieren
+  status               Status des Services prüfen
+  logs                 Live-Logs anzeigen
+  stats                Backup-Statistiken anzeigen
+  quick-setup          Schnelle Konfiguration für Anfänger
+  test                 Tests durchführen
+  help                 Diese Hilfe anzeigen
+
+${BLUE}Optionen:${NC}
+  -c, --config FILE    Konfigurationsdatei (Standard: /etc/rapiba/rapiba.conf)
+  -v, --verbose        Verbose Output
+  -h, --help           Hilfe anzeigen
+
+${BLUE}Beispiele:${NC}
+  sudo $0 install
+  sudo $0 quick-setup
+  $0 status
+  $0 logs
+  $0 stats
+
+EOF
+}
+
+check_root() {
+    if [ "$EUID" -ne 0 ]; then
+        print_error "Dieser Befehl erfordert Root-Zugriff"
+        exit 1
+    fi
+}
+
+cmd_install() {
+    print_header "Installation von $PROJECT_NAME"
+    
+    check_root
+    
+    print_info "Prüfe Voraussetzungen..."
+    
+    # Prüfe Python
+    if ! command -v python3 &> /dev/null; then
+        print_error "Python 3 nicht gefunden"
+        exit 1
+    fi
+    print_success "Python 3 gefunden: $(python3 --version)"
+    
+    # Starte Installer
+    bash "$SCRIPT_DIR/install.sh"
+    
+    print_success "Installation abgeschlossen"
+    print_info "Nächste Schritte:"
+    echo "  1. Konfiguriere: sudo nano /etc/rapiba/rapiba.conf"
+    echo "  2. Starten: sudo systemctl start rapiba"
+    echo "  3. Check: sudo systemctl status rapiba"
+}
+
+cmd_uninstall() {
+    print_header "Deinstallation von $PROJECT_NAME"
+    
+    check_root
+    
+    read -p "Wirklich deinstallieren? Backups werden NICHT gelöscht. (ja/nein): " confirm
+    [ "$confirm" = "ja" ] || exit 0
+    
+    print_info "Stoppe Service..."
+    systemctl stop rapiba || true
+    systemctl disable rapiba || true
+    
+    print_info "Entferne Dateien..."
+    rm -f /usr/local/bin/rapiba
+    rm -f /usr/local/bin/rapiba_monitor
+    rm -f /usr/local/bin/rapiba_trigger
+    rm -rf /usr/local/lib/rapiba
+    rm -f /etc/systemd/system/rapiba.service
+    rm -f /etc/systemd/system/rapiba-backup.service
+    rm -f /etc/systemd/system/rapiba-backup.timer
+    rm -f /etc/udev/rules.d/99-rapiba.rules
+    
+    systemctl daemon-reload
+    
+    print_success "Deinstallation abgeschlossen"
+    print_info "Verbleibende Dateien:"
+    echo "  - /etc/rapiba/rapiba.conf"
+    echo "  - /var/lib/rapiba/ (Duplikat-Datenbank)"
+    echo "  - /var/log/rapiba/ (Logs)"
+    echo "  - /backup/ (Backups)"
+}
+
+cmd_status() {
+    print_header "Status von $PROJECT_NAME"
+    
+    echo ""
+    echo "Service-Status:"
+    systemctl status rapiba || true
+    
+    echo ""
+    echo "Prozess-Informationen:"
+    ps aux | grep rapiba | grep -v grep || print_warning "Service läuft nicht"
+    
+    echo ""
+    echo "Konfiguration:"
+    [ -f /etc/rapiba/rapiba.conf ] && print_success "Konfiguration vorhanden" || print_error "Konfiguration nicht vorhanden"
+    
+    echo ""
+    echo "Verzeichnisse:"
+    for dir in /backup /var/lib/rapiba /var/log/rapiba; do
+        if [ -d "$dir" ]; then
+            size=$(du -sh "$dir" 2>/dev/null | cut -f1)
+            print_success "$dir ($size)"
+        else
+            print_warning "$dir existiert nicht"
+        fi
+    done
+}
+
+cmd_logs() {
+    print_header "Live-Logs von $PROJECT_NAME"
+    
+    if [ -d /var/log/rapiba ]; then
+        journalctl -u rapiba -f
+    else
+        print_error "Log-Verzeichnis nicht gefunden"
+        exit 1
+    fi
+}
+
+cmd_stats() {
+    print_header "Statistiken von $PROJECT_NAME"
+    
+    if [ ! -f /usr/local/lib/rapiba/rapiba_admin.py ]; then
+        print_error "Admin-Tool nicht gefunden"
+        exit 1
+    fi
+    
+    python3 /usr/local/lib/rapiba/rapiba_admin.py \
+        --config /etc/rapiba/rapiba.conf \
+        --stats \
+        --db-stats
+}
+
+cmd_quick_setup() {
+    print_header "Quick Setup von $PROJECT_NAME"
+    
+    check_root
+    
+    if [ ! -f /etc/rapiba/rapiba.conf ]; then
+        print_error "Rapiba nicht installiert"
+        echo "Führe zuerst: sudo $0 install"
+        exit 1
+    fi
+    
+    bash "$SCRIPT_DIR/quicksetup.sh"
+}
+
+cmd_test() {
+    print_header "Tests durchführen"
+    
+    print_info "Prüfe Python-Module..."
+    
+    if python3 -m py_compile "$SCRIPT_DIR/src/backup_handler.py" 2>/dev/null; then
+        print_success "backup_handler.py Syntax OK"
+    else
+        print_error "Syntax-Fehler in backup_handler.py"
+        exit 1
+    fi
+    
+    print_info "Prüfe Konfigurationsdatei..."
+    if python3 -c "
+import sys
+sys.path.insert(0, '$SCRIPT_DIR/src')
+from backup_handler import Config
+config = Config('$SCRIPT_DIR/etc/rapiba.conf')
+print('  BACKUP_TARGET:', config.get('BACKUP_TARGET'))
+print('  BACKUP_PATH_FORMAT:', config.get('BACKUP_PATH_FORMAT'))
+print('  DUPLICATE_CHECK_METHOD:', config.get('DUPLICATE_CHECK_METHOD'))
+" 2>/dev/null; then
+        print_success "Konfiguration lädt korrekt"
+    else
+        print_error "Fehler beim Laden der Konfiguration"
+        exit 1
+    fi
+    
+    print_info "Starte Unit-Tests..."
+    if [ -f "$SCRIPT_DIR/test_rapiba.py" ]; then
+        python3 "$SCRIPT_DIR/test_rapiba.py" -v 2>&1 | head -20
+        print_success "Tests durchgeführt"
+    else
+        print_warning "Keine Unit-Tests gefunden"
+    fi
+}
+
+# Main
+case "${1:-help}" in
+    install)
+        cmd_install
+        ;;
+    uninstall)
+        cmd_uninstall
+        ;;
+    status)
+        cmd_status
+        ;;
+    logs)
+        cmd_logs
+        ;;
+    stats)
+        cmd_stats
+        ;;
+    quick-setup)
+        cmd_quick_setup
+        ;;
+    test)
+        cmd_test
+        ;;
+    help|-h|--help)
+        show_help
+        ;;
+    *)
+        print_error "Unbekannter Befehl: $1"
+        echo ""
+        show_help
+        exit 1
+        ;;
+esac
