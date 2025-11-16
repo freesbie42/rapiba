@@ -1,0 +1,15 @@
+# src/rapiba-backup@.service
+[Unit]
+Description=RapiBa Kamera-Backup für %I
+After=rapiba-usb-mount@%i.service
+Requires=rapiba-usb-mount@%i.service
+
+[Service]
+Type=oneshot
+User=rapiba
+Group=rapiba
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/usr/local/bin/rapiba_backup.sh %i
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

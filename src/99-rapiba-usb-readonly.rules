@@ -1,0 +1,12 @@
+# src/99-rapiba-usb-readonly.rules
+# RapiBa USB Read-Only Auto-Mount + Auto-Backup (nur Kamera-Port 1-1.1)
+#
+# Bei Blockpartition mit Dateisystem an USB-Port 1-1.1:
+#   - rapiba-usb-mount@%k.service
+#   - rapiba-backup@%k.service  (falls installiert)
+
+ACTION=="add", SUBSYSTEM=="block", ENV{DEVTYPE}=="partition", \
+  ENV{ID_FS_USAGE}=="filesystem", ENV{ID_FS_TYPE}!="swap", \
+  SUBSYSTEMS=="usb", KERNELS=="1-1.1", \
+  TAG+="systemd", \
+  ENV{SYSTEMD_WANTS}+="rapiba-usb-mount@%k.service rapiba-backup@%k.service"

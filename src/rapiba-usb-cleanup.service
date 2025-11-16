@@ -1,0 +1,7 @@
+# src/rapiba-usb-cleanup.service
+[Unit]
+Description=RapiBa USB Auto-Cleanup (Unmount von entfernten/verschwundenen Geräten)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/rapiba_usb_mount.sh cleanup

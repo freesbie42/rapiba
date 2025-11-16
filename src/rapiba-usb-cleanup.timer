@@ -1,0 +1,11 @@
+# src/rapiba-usb-cleanup.timer
+[Unit]
+Description=RapiBa USB Auto-Cleanup Timer
+
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=30
+Unit=rapiba-usb-cleanup.service
+
+[Install]
+WantedBy=timers.target

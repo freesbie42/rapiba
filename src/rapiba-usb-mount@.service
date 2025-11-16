@@ -1,0 +1,9 @@
+# src/rapiba-usb-mount@.service
+[Unit]
+Description=RapiBa USB Auto-Mount (read-only) for %I
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/rapiba_usb_mount.sh add /dev/%I
